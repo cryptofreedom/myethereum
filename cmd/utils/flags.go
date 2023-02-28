@@ -1,8 +1,8 @@
 package utils
 
 import (
-	"github.com/ethereum/go-ethereum/eth/ethconfig"
 	"github.com/urfave/cli/v2"
+	"myethereum/eth/ethconfig"
 	"myethereum/internal/flags"
 )
 
@@ -48,6 +48,12 @@ var (
 		Usage:    "Explicitly set network id (integer)(For testnets: use --rinkeby, --goerli, --sepolia instead)",
 		Value:    ethconfig.Defaults.NetworkId,
 		Category: flags.EthCategory,
+	}
+	CacheFlag = &cli.IntFlag{
+		Name:     "cache",
+		Usage:    "Megabytes of memory allocated to internal caching (default = 4096 mainnet full node, 128 light mode)",
+		Value:    1024,
+		Category: flags.PerfCategory,
 	}
 	// DatabasePathFlags is the flag group of all database path flags.
 	DatabasePathFlags = []cli.Flag{

@@ -6,6 +6,7 @@ import (
 	"myethereum/cmd/utils"
 	"myethereum/internal/flags"
 	"os"
+	"strconv"
 )
 
 const (
@@ -34,6 +35,14 @@ func init() {
 	}
 }
 
+func prepare(ctx *cli.Context) {
+	if !ctx.IsSet(utils.NetworkIdFlag.Name) {
+		fmt.Println("Starting Geth on Ethereum mainnet...")
+	}
+	ctx.Set(utils.CacheFlag.Name, strconv.Itoa(516))
+	//metric collection
+}
+
 func main() {
 	if err := app.Run(os.Args); err != nil {
 		fmt.Fprintln(os.Stderr, err)
@@ -45,7 +54,6 @@ func geth(ctx *cli.Context) error {
 	if args := ctx.Args().Slice(); len(args) > 0 {
 		return fmt.Errorf("invalid Command:%q", args[0])
 	}
-	if ctx.IsSet(utils.Name) {
-		fmt.Println("set identity")
-	}
+	prepare(ctx)
+
 }
