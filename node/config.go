@@ -1,5 +1,7 @@
 package node
 
+import "log"
+
 const (
 	datadirPrivateKey      = "nodekey"            // Path within the datadir to the node's private key
 	datadirJWTKey          = "jwtsecret"          // Path within the datadir to the node's jwt secret
@@ -23,4 +25,5 @@ type Config struct {
 	USB                   bool   `toml:",omitempty"`
 	SmartCardDaemonPath   string `toml:",omitempty"`
 	IPCPath               string
+	Logger                log.Logger `toml:",omitempty"`
 }
