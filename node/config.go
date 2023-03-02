@@ -1,6 +1,10 @@
 package node
 
-import "log"
+import (
+	"myethereum/log"
+	"os"
+	"path/filepath"
+)
 
 const (
 	datadirPrivateKey      = "nodekey"            // Path within the datadir to the node's private key
@@ -26,4 +30,43 @@ type Config struct {
 	SmartCardDaemonPath   string `toml:",omitempty"`
 	IPCPath               string
 	Logger                log.Logger `toml:",omitempty"`
+}
+
+func getKeyStoreDir(conf *Config) (string, bool, error) {
+	keydir, err := conf.KeyDirConfig()
+	if err != nil {
+		return "", false, err
+	}
+	isEphemeral := false
+	if keydir == "" {
+		keydir, err = os.MkdirTemp(os.TempDir(), "go-ethereum-keystore")
+		isEphemeral = true
+	}
+	if err != nil {
+		return "", false, err
+	}
+	if err := os.MkdirAll(keydir, 0700); err != nil {
+		return "", false, err
+	}
+	return keydir, isEphemeral, nil
+}
+
+func (c *Config) KeyDirConfig() (string, error) {
+	var (
+		keydir string
+		err    error
+	)
+	switch {
+	case filepath.IsAbs(c.KeyStoreDir):
+		keydir = c.KeyStoreDir
+	case c.DataDir != "":
+		if c.KeyStoreDir == "" {
+			keydir = filepath.Join(c.DataDir, datadirDefaultKeyStore)
+		} else {
+			keydir, err = filepath.Abs(c.KeyStoreDir)
+		}
+	case c.KeyStoreDir != "":
+		keydir, err = filepath.Abs(c.KeyStoreDir)
+	}
+	return keydir, err
 }
