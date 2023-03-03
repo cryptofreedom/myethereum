@@ -1,9 +1,11 @@
 package enr
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"github.com/ethereum/go-ethereum/rlp"
+	"io"
 	"sort"
 )
 
@@ -80,4 +82,155 @@ func computeSize(r *Record) uint64 {
 		size += uint64(len(p.v))
 	}
 	return rlp.ListSize(size)
+}
+
+func (r *Record) Set(e Entry) {
+	blob, err := rlp.EncodeToBytes(e)
+	if err != nil {
+		fmt.Errorf("enr:can't encode %s:%v", e.ENRKey(), err)
+	}
+	r.invalidate()
+	pairs := make([]pair, len(r.pairs))
+	copy(pairs, r.pairs)
+	i := sort.Search(len(pairs), func(i int) bool {
+		return pairs[i].k >= e.ENRKey()
+	})
+	switch {
+	case i < len(pairs) && pairs[i].k == e.ENRKey():
+		pairs[i].v = blob
+
+	case i < len(r.pairs):
+		el := pair{e.ENRKey(), blob}
+		pairs = append(pairs, pair{})
+		copy(pairs[i+1:], pairs[i:])
+		pairs[i] = el
+	default:
+		pairs = append(pairs, pair{e.ENRKey(), blob})
+	}
+	r.pairs = pairs
+}
+func (r *Record) invalidate() {
+	if r.signature != nil {
+		r.seq++
+	}
+	r.signature = nil
+	r.raw = nil
+}
+
+func (r *Record) Signature() []byte {
+	if r.signature == nil {
+		return nil
+	}
+	cpy := make([]byte, len(r.signature))
+	copy(cpy, r.signature)
+	return cpy
+}
+
+func (r *Record) EncodeRLP(w io.Writer) error {
+	if r.signature == nil {
+		return errEncodeUnsigned
+	}
+	_, err := w.Write(r.raw)
+	return err
+}
+
+func (r *Record) DecodeRLP(s *rlp.Stream) error {
+	dec, raw, err := decodeRecord(s)
+	if err != nil {
+		return err
+	}
+	*r = dec
+	r.raw = raw
+	return nil
+}
+
+func decodeRecord(s *rlp.Stream) (dec Record, raw []byte, err error) {
+	raw, err = s.Raw()
+	if err != nil {
+		return dec, raw, err
+	}
+	if len(raw) > SizeLimit {
+		return dec, raw, errTooBig
+	}
+	s = rlp.NewStream(bytes.NewReader(raw), 0)
+	if _, err := s.List(); err != nil {
+		return dec, raw, err
+	}
+	if err = s.Decode(&dec.signature); err != nil {
+		if err == rlp.EOL {
+			err = errIncompleteList
+		}
+		return dec, raw, err
+	}
+	if err = s.Decode(&dec.seq); err != nil {
+		if err == rlp.EOL {
+			err = errIncompleteList
+		}
+		return dec, raw, err
+	}
+	var prevkey string
+	for i := 0; ; i++ {
+		var kv pair
+		if err := s.Decode(&kv.k); err != nil {
+			if err == rlp.EOL {
+				break
+			}
+			return dec, raw, err
+		}
+		if err := s.Decode(&kv.v); err != nil {
+			if err == rlp.EOL {
+				return dec, raw, errIncompletePair
+			}
+			return dec, raw, err
+		}
+		if i > 0 {
+			if kv.k == prevkey {
+				return dec, raw, errDuplicateKey
+			}
+			if kv.k < prevkey {
+				return dec, raw, errNotSorted
+			}
+		}
+		dec.pairs = append(dec.pairs, kv)
+		prevkey = kv.k
+	}
+	return dec, raw, nil
+}
+
+func (r *Record) AppendElements(list []interface{}) []interface{} {
+	list = append(list, r.seq)
+	for _, p := range r.pairs {
+		list = append(list, p.k, p.v)
+	}
+	return list
+}
+
+func (r *Record) VerifySignature(s IdentityScheme) error {
+	return s.Verify(r, r.signature)
+}
+
+func (r *Record) SetSig(s IdentityScheme, sig []byte) error {
+	switch {
+	case s == nil && sig != nil:
+		panic("enr: invalid call to SetSig with non-nil signature but nil scheme")
+	case s != nil && sig == nil:
+		panic("enr: invalid call to SetSig with nil signature but non-nil scheme")
+	case s != nil:
+		if err := s.Verify(r, sig); err != nil {
+			return err
+		}
+		raw, err := r.encode(sig)
+		if err != nil {
+			return err
+		}
+		r.signature, r.raw = sig, raw
+	// Reset otherwise.
+	default:
+		r.signature, r.raw = nil, nil
+	}
+
+}
+
+func (r *Record) encode(sig []byte) (raw []byte, err error) {
+	list := make([]interface{})
 }
